@@ -5,7 +5,7 @@ const channel = {
     id: Utilities.getUuid(),
     type: 'web_hook',
     token: '',
-    expiration: `${new Date(Date.now() + 60 * 31 * 1000).getTime()}`,
+    expiration: `${new Date(Date.now() + 60 * 60 * 24 * 7 * 1000).getTime()}`,
     address: webAppURL
 }
 
@@ -24,7 +24,7 @@ const doPost = (e: GoogleAppsScript.Events.DoPost) => {
         })
         props.setProperty('PAGE_TOKEN', res.newStartPageToken)
     } catch (e) {
-        console.error(e)
+        console.error('doPost(e:) yielded an error: ' + e)
     } finally {
         lock.releaseLock()
     }
@@ -38,7 +38,7 @@ const startWatching = () => {
     try {
         stopWatching()
     } catch (e) {
-        console.error(e)
+        console.error('stopWatching() yielded an error: ' + e)
     }
     props.setProperty('CHANNEL_ID', channel.id)
     props.setProperty('RESOURCE_ID', res?.resourceId || '')
