@@ -1,5 +1,6 @@
 const props = PropertiesService.getScriptProperties()
-const accessToken = props.getProperty('LINE_NOTIFY_ACCESS_TOKEN')!
+const lineChannelAccessToken = props.getProperty('LINE_CHANNEL_ACCESS_TOKEN')!
+const lineGroupID = props.getProperty('LINE_GROUP_ID')!
 const webAppURL = props.getProperty('WEB_APP_URL')!
 const channel = {
     id: Utilities.getUuid(),
@@ -9,18 +10,19 @@ const channel = {
     address: webAppURL
 }
 
-const doPost = (e: GoogleAppsScript.Events.DoPost) => {
+declare let global: any
+global.doPost = (e: GoogleAppsScript.Events.DoPost) => {
     if (!e.postData || !e.postData.contents) return
     const lock = LockService.getScriptLock()
     if (!lock.tryLock(10000)) return
     try {
-        const pageToken = props.getProperty('PAGE_TOKEN')
-        const res = Drive.Changes?.list({ pageToken })
-        if (!res || !res.items || !res.newStartPageToken) return
-        res.items.forEach((item) => {
-            if (!item.file || !item.file.title || !item.file.id || item.file.mimeType !== 'image/jpeg') return
-            const file = DriveApp.getFileById(item.file.id)
-            sendToLINE(item.file.title, file)
+        const pageToken = props.getProperty('PAGE_TOKEN')!
+        const res = Drive.Changes?.list(pageToken)
+        if (!res || !res.changes || !res.newStartPageToken) return
+        res.changes.forEach((change) => {
+            if (!change.file || !change.file.name || !change.file.id || change.file.mimeType !== 'image/jpeg') return
+            //const file = DriveApp.getFileById(change.file.id)
+            global.sendToLINE(change.file.name, `https://drive.google.com/uc?id=${change.file.id}`, `https://drive.google.com/uc?id=${change.file.id}`)
         })
         props.setProperty('PAGE_TOKEN', res.newStartPageToken)
     } catch (e) {
@@ -30,13 +32,14 @@ const doPost = (e: GoogleAppsScript.Events.DoPost) => {
     }
 }
 
-const startWatching = () => {
+global.startWatching = () => {
     const startPageToken = Drive.Changes?.getStartPageToken()
-    props.setProperty('PAGE_TOKEN', JSON.parse(startPageToken as string).startPageToken)
-    const res = Drive.Changes?.watch(channel)
+    const pageToken = JSON.parse(startPageToken as string).startPageToken
+    props.setProperty('PAGE_TOKEN', pageToken)
+    const res = Drive.Changes?.watch(channel, pageToken)
     console.log(JSON.stringify(res, null, ' '))
     try {
-        stopWatching()
+        global.stopWatching()
     } catch (e) {
         console.error('stopWatching() yielded an error: ' + e)
     }
@@ -44,7 +47,7 @@ const startWatching = () => {
     props.setProperty('RESOURCE_ID', res?.resourceId || '')
 }
 
-const stopWatching = () => {
+global.stopWatching = () => {
     const id = props.getProperty('CHANNEL_ID')
     const resourceId = props.getProperty('RESOURCE_ID')
     if (!id || !resourceId) return
@@ -52,15 +55,26 @@ const stopWatching = () => {
     console.log(JSON.stringify(res, null, ' '))
 }
 
-const sendToLINE = (filename: string, imageFile: GoogleAppsScript.Drive.File) => {
-    UrlFetchApp.fetch('https://notify-api.line.me/api/notify', {
+global.sendToLINE = (filename: string, imageURL: string, thumbnailImageURL: string) => {
+    UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
         method: 'post',
         headers: {
-            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${lineChannelAccessToken}`,
         },
         payload: {
-            message: filename,
-            imageFile: imageFile.getAs('image/jpeg'),
+            to: lineGroupID,
+            messages: [
+                {
+                    'type': 'text',
+                    'text': filename,
+                },
+                {
+                    'type': 'image',
+                    'originalContentUrl': imageURL,
+                    'previewImageUrl': thumbnailImageURL
+                }
+            ],
         }
     })
 }
